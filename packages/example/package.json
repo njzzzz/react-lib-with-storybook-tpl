@@ -1,0 +1,43 @@
+{
+  "name": "@packages/example",
+  "type": "module",
+  "version": "1.1.3",
+  "description": "client",
+  "author": "njzzzz",
+  "license": "MIT",
+  "homepage": "",
+  "repository": "",
+  "keywords": [],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./style": {
+      "default": "./dist/style.css"
+    },
+    "./src/*": [
+      "./src/*",
+      "./src/*/index.ts",
+      "./src/*/index.tsx"
+    ]
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "index.ts",
+    "src"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "dependencies": {
+    "@packages/example": "workspace:^",
+    "react": "> 16.7",
+    "react-dom": "> 16.7"
+  }
+}

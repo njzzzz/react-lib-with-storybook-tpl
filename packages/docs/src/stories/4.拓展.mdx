@@ -1,0 +1,204 @@
+# 增加自定义组件
+
+### 在增加自定义组件之前需要了解平台和文件的概念
+
+目前，内置的平台为`pc` 和 `mobile`, 文件为 `index` 和 `view`
+configures 文件为整个项目默认的组件配置
+主要利用了dynamic import做的动态引入，在切换平台或文件时加载不同的组件
+所以在自定义组件时要注意文件的摆放位置
+
+1. 定义组件说明
+   在项目`src`目录下创建 `rf-render-components`文件夹
+
+2. 创建平台目录和文件目录结构大致如下
+
+```
+|--rfrender-components
+    |--Button
+        |--pc
+            |--index.tsx
+            |--view.tsx
+            |--configure.tsx
+        |--mobile
+            |--index.tsx
+            |--view.tsx
+            |--configure.tsx
+```
+
+3. 自定义组件代码（下面以pc举例）
+
+   - 快速集成已存在的组件, 要求已存在的组件必须有抛出值的事件如onChange事件存在，或者不参与表单值的组件那就没有任何要求
+
+     - 新增 `index.tsx`
+
+       - 比如我想集成antd的Button组件
+
+         ```ts
+         import { defineRfRenderComponentApi } from "@packages/antd";
+         import { Button } from "antd";
+         export default defineRfRenderComponentApi(Button);
+         ```
+
+       - 假如我有个组件叫UserSelect,他抛出值的事件叫onValue
+
+         ```ts
+         import { defineRfRenderComponentApi } from "@packages/antd";
+         import UserSelect from "UserSelect";
+         export default defineRfRenderComponentApi(UserSelect, {
+           propsMap: {
+             onChange: "onValue",
+           },
+         });
+         ```
+
+       - 如果我想支持mapKeys属性，比如UserSelect组件只给了id， 我还想返回整个对象，其中包含了name等字段, 那就需要自定义onMapKeysChange返回这个对象
+
+         ```ts
+           import { defineRfRenderComponentApi, DNCV } from '@packages/antd'
+           import UserSelect from 'UserSelect'
+           export default defineRfRenderComponentApi(UserSelect, {
+               // 这里的val是changeConfig返回的值, rfrender里包含了当前表单的配置项
+               onChange:(...val) => {
+                  const userInfo  {}
+                  // 在这里可以经过各种处理得到userInfo
+                  // 第一位表示表单的值后续的表示mapKeys对应的值，如果只希望改mapKeys对应的值，需要将第一项的值传递DNCV，表示不改此项的值
+                  return [DNCV,userInfo]
+               },
+               propsMap: {
+                  onChange: 'onValue'
+               }
+           })
+         ```
+
+     - 新增configure.tsx文件, 默认会加载此处配置
+
+     ```tsx
+     import { defineConfigure } from "@packages/core";
+     export default defineConfigure(
+       ({ item }) => {
+           props: {
+            type: 'primary'
+           },
+         };
+       }
+     );
+     export interface ConfigureProps {
+       requiredWithRules?: boolean;
+     }
+     ```
+
+     - 完全自定义
+       - 完全自定义只要记住两点
+         1. 插件类型是单纯的layout组件还是参与表单运算的组件 Layout组件请参考`@packages/antd/plugins/Layout/pc/index.tsx`
+         2. 调用props.onChange事件以修改表单值，并传入一个数组，数组的值第一项为value,后续的值和mapKeys定义的键顺序对应
+
+       ```tsx
+       import { defineRfRenderComponent } from "@packages/antd";
+       interface MyCustomerComponentProps {
+         prop1?: string;
+         prop2: string;
+       }
+        export default defineRfRenderComponent<'MyCustomerComponent'>(({ itemConfig, onChange }) => {
+         // 如果是layout组件可以获取layout配置进行自定义布局, item是当前表单项的配置
+         const { props: MyCustomerComponentProps } = itemConfig;
+         return (
+           <input
+             onInput={(e) => {
+               const value = e.target.value;
+               onChange([value, `mapKeys-0-${value}`, `mapKeys-1-${value}`]);
+             }}
+           />
+         );
+       }
+       ```
+       具体可以查看`@packages/antd`包下面的plugin文件夹
+
+4. 拓展widget及组件属性
+
+   - 修改`types/@packages/antd/index.d.ts`文件新增以下内容
+
+     ```ts
+     import "@packages/antd";
+     import { AntdDefaultWidgetProps, AntdWidgetProps } from "@packages/antd";
+     import { ButtonProps } from "antd";
+     import MyCustomerComponentProps from "MyCustomerComponentProps";
+     declare module "@packages/antd" {
+       export interface WidgetProps extends AntdWidgetProps {
+         // 在WidgetProps中新增一个widget类型Button, 并配置其属性
+         Button: ButtonProps;
+         // 在WidgetProps中新增一个widget类型UserSelect, 并配置其属性
+         MyCustomerComponent: MyCustomerComponentProps;
+       }
+       export interface DefaultWidgetProps extends AntdDefaultWidgetProps {}
+     }
+     ```
+
+5. 创建插件导出
+   - 新增文件 `rfrender-components/index.tsx`, 写入以下内容
+     ```ts
+     import { definePlugin } from "@packages/core";
+     import ButtonIndex from "./rfrender-components/Button/pc";
+     import ButtonIndexConfig from "./rfrender-components/Button/pc/config";
+     import ButtonView from "./rfrender-components/Button/pc/view";
+     import ButtonViewConfig from "./rfrender-components/Button/pc/view/viewConfig";
+
+     import MyCustomerComponentIndex from "./rfrender-components/MyCustomerComponent/pc";
+     import MyCustomerComponentIndexConfig from "./rfrender-components/MyCustomerComponent/pc/config";
+     import MyCustomerComponentView from "./rfrender-components/MyCustomerComponent/pc/view";
+     import MyCustomerComponentViewConfig from "./rfrender-components/MyCustomerComponent/pc/view/viewConfig";
+     /**
+      * 这里我们只适配了pc，如果只支持pc则修改`${platform}`为 'pc' 即可
+      */
+     export const customerRfRenderPlugin = definePlugin([
+       {
+         name: "Button",
+        loader: (_platform, fileName) => {
+              switch (fileName) {
+                case 'index':
+                  return ButtonIndex
+                case 'view':
+                  return ButtonView
+                default:
+                  return ButtonIndex
+              }
+        },
+        configure: (_platform, fileName) =>
+            fileName === 'view'
+                ? ButtonViewConfig
+                : ButtonIndexConfig
+       },
+       {
+         name: "MyCustomerComponent",
+         loader: (_platform, fileName) => {
+              switch (fileName) {
+                case 'index':
+                  return MyCustomerComponentIndex
+                case 'view':
+                  return MyCustomerComponentView
+                default:
+                  return MyCustomerComponentIndex
+              }
+        },
+        configure: (_platform, fileName) =>
+            fileName === 'view'
+                ? MyCustomerComponentViewConfig
+                : MyCustomerComponentIndexConfig
+       },
+     ]);
+     ```
+
+6. 注册插件
+
+```ts
+import customerRfRenderPlugin from "./src/rfrender-components/index.tsx";
+new RfRender({
+  // ...其他配置
+  plugins: [
+    // ...其他插件
+    ...antdRfRenderPlugin,
+    ...customerRfRenderPlugin,
+  ],
+});
+```
+
+import { defineConfigure } from "@packages/core";
